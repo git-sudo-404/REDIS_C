@@ -3,6 +3,8 @@
 #include<stdlib.h>
 #include<unistd.h>
 #include<netinet/in.h>
+#include "utils.h"
+
 
 int main(){
   
@@ -22,10 +24,29 @@ int main(){
   }
     
   printf("\nConnected with Server\n");
-
-  chat_with_server(fd) ;
+  printf("\n\tMessage to Server : ");
   
+  char wbuf[4096];
 
+  scanf("%4091s",&wbuf[4]);
+
+  int len = strlen(&wbuf[4]);
+
+  memcpy(wbuf,&len,4);
+
+  wbuf[len+5] = '\0';
+  
+  write_full(fd,wbuf,len+5);
+
+  char rbuf[4096];
+
+  rv = read_full(fd,rbuf,4);
+
+  memcpy(&len,rbuf,4);
+
+  rv = read_full(fd,rbuf,len);
+
+  printf("\n\tMessage from Server : %s",rbuf);
 
   close(fd) ;
 

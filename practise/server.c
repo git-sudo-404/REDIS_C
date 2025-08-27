@@ -3,8 +3,7 @@
 #include<string.h>
 #include<unistd.h>
 #include<netinet/in.h>
-#include<utils.h>
-
+#include "utils.h"
 
 
 int main(){
@@ -44,7 +43,7 @@ int main(){
 
     int client_fd = accept(fd,(struct sockaddr*) &client_addr ,&client_addr_len) ;
   
-    chat_with_client(client_fd) ;
+		one_response(client_fd) ;
 
     close(client_fd) ;
 
