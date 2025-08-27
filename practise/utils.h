@@ -105,3 +105,27 @@ void chat_with_server(int fd){
 
 }
 
+
+void one_response(int client_fd){
+
+  char rbuf[4096];
+
+  int len = 0;
+
+  read_full(client_fd,(char*)&len,4);
+
+  read_full(client_fd,rbuf,len);
+
+  printf("\n\tMessage from client : %s",rbuf) ;
+
+  char wbuf[4096];
+
+  memcpy(wbuf,&len,4);
+
+  memcpy(&wbuf[4],rbuf,len);
+
+  printf("\nMessage sent back : %s\n",&wbuf[4]);
+
+  write_full(client_fd,wbuf,len+4);
+
+}
