@@ -1,10 +1,10 @@
 Part 1. Redis from 0 to 1  
   
-Introduction                  -- ✅
-Socket Programming            -- ✅
-TCP Server and Client         -- ✅
-Request-Response Protocol     -- ✅
-Concurrent IO Models          -- ✅
+Introduction                  -- ✅  
+Socket Programming            -- ✅  
+TCP Server and Client         -- ✅  
+Request-Response Protocol     -- ✅  
+Concurrent IO Models          -- ✅  
 Event Loop (Part 1)          
 Event Loop (Part 2)  
 Key-Value Server  
@@ -21,5 +21,6 @@ Sorted Set
 Timer and Timeout  
 Cache Expiration with TTL  
 Thread Pool  
+
 
 
