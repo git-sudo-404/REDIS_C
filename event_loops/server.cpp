@@ -28,6 +28,42 @@ struct poll_fd{
 
 };
 
+
+// what does blocking fd mean ?
+//   --> Usually , the socket when performing read, write or accept it would wait for a connection or read or write to happen (Blocking in nature) 
+//   --> But when you set the O_NONBLOCK flag the accept return -1 instead of waiting if there's no one to connect to  and sets the 
+//       global error valuse errno to 'EAGAIN' or 'EWOULDBACK' 
+
+static void fd_set_nb(int fd){          // sets the socket to be non - blocking 
+  fcntl(fd,F_SETFL,fcntl(fd,F_GETFL,0)|O_NONBLOCK);     
+}
+
+static Conn *handle_accept(int fd){
+  
+  struct sockaddr_in client_addr = {};
+  socketlen_t addrlen = sizeof(client_addr) ;
+
+  int connfd = accept(fd,(struct sockaddr*)&client_addr,addrlen) ; // this accept is non - blocking since this handle_accept() function is called only after the poll() detects something
+
+  if(connfd<0){
+    return NULL ;
+  }
+
+  fd_set_nd(client_addr);
+
+  Conn conn* = new Conn();
+  conn->fd = connfd ;
+  conn->want_read = true ; // read the first request 
+
+
+  return conn;
+  
+
+}
+
+
+
+
 int main(){
 
   std::vector<Conn *> fd2Conn ; // map of fd -> Conn , no need of hash_map since the fd's are generated sequentially from 3 
@@ -95,19 +131,47 @@ int main(){
 
     if(poll_args[0].revents){
 
-      if(Conn *conn = handle_accept(fd)) {
+      if(Conn *conn = handle_accept(fd)) {    // has an underlying accept() and creates a conn struct and sends it back 
 
-        if(fd2Conn.size() <= (size_t)conn->fd){
+        if(fd2Conn.size() <= (size_t)conn->fd){     // if the vector is too small to hold the new connection 
 
-          fd2Conn.resize(conn->fd + 1);
+          fd2Conn.resize(conn->fd + 1);     // increase the size of the vector
 
         }
 
-        fd2Conn[conn->fd] = conn ;
+        fd2Conn[conn->fd] = conn;     //  and assign it in the index equal to its fd 
+
 
       }
 
     }
+
+    // handle connections 
+
+    for(int i=1;i<=poll_args.size();i++){
+
+      uint32_t ready = poll_args[i].revents ;
+      Conn *conn = fd2Conn[poll_args[i].fd] ;
+
+      if(ready & POLLIN){
+        handle_read(conn) ;
+      }
+
+
+      if(ready & POLLOUT){
+        handle_write(conn) ;
+      }
+
+      if(ready & POLLERR || conn->want_close){
+        close(conn->fd) ;
+        fd2Conn[conn->fd] = NULL ;
+        delete conn ;
+      }
+
+    } 
+
+     
+
 
   }
 
