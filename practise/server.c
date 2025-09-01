@@ -9,6 +9,7 @@
 int main(){
 
   int fd = socket(AF_INET,SOCK_STREAM,0);
+  printf("The server fd is : %d",fd);
 
   int re_use_addr = 1;
   setsockopt(fd,SOL_SOCKET,SO_REUSEADDR,&re_use_addr,sizeof(re_use_addr));
@@ -34,6 +35,7 @@ int main(){
   }
 
   printf("\nServer Running on PORT : %d\n",server_addr.sin_port) ;
+  
 
   while(1){
   
