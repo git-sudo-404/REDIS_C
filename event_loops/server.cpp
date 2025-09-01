@@ -64,9 +64,50 @@ int main(){
         continue;
 
       struct poll_fd pfd = {conn->fd,POLLERR,0};
+
+      if(conn->want_read){
+        pfd.events |= POLLIN ;
+      }
+
+      if(conn->want_write){
+        pfd.events |= POLLOUT ;
+      }
+  
+      poll_args.pb(pfd) ;
+
+    }
+
+    // call poll()
+
+    int rv = poll(poll_args.data(),(nfds_t)poll_args.size(),-1) ;
+  
+    if(rv<0 && errno = EINTR){
+      continue;
+    }
+
+    if(rv<0){
+      perror("Poll()");
+      exit(1);
     }
 
 
+    // handle the listening socket 
+
+    if(poll_args[0].revents){
+
+      if(Conn *conn = handle_accept(fd)) {
+
+        if(fd2Conn.size() <= (size_t)conn->fd){
+
+          fd2Conn.resize(conn->fd + 1);
+
+        }
+
+        fd2Conn[conn->fd] = conn ;
+
+      }
+
+    }
 
   }
 
