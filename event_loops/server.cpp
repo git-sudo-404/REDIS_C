@@ -99,7 +99,7 @@ int main(){
     }
 
     // Loop through all the client fds and check for data.
-    
+    // new struct is needed for mainting the incoming and outgoing data of each client. 
 
   }
 
