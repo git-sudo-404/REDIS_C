@@ -11,22 +11,27 @@ using namespace std;
 
 #define PORT 8080
 
-struct pollfd{  // This is the struct that should be passed to the poll() system call.
+// NOTE: No need to redefine it again since it is already imported using the poll.h .
+// struct pollfd{  // This is the struct that should be passed to the poll() system call.
+//
+//   int fd;
+//   short events;
+//   short revents;
+//
+// }
 
-  int fd;
-  short events;
-  short revents;
-
-}
-
-vector<pollfd>fds;
+vector<pollfd>pfds;
 
 int main(){
 
   int fd = socket(AF_INET,SOCK_STREAM,0);
+  if(fd<0){
+    perror("Error : socket()");
+    exit(1);
+  }
 
   int setsockoptval = 1;
-  setsockopt(fd,SOL_SOCKET,SO_REUSEADDRESS,&setsockoptval,sizeof(setsockoptval));
+  setsockopt(fd,SOL_SOCKET,SO_REUSEADDR,&setsockoptval,sizeof(setsockoptval));
 
   struct sockaddr_in server_addr = {};
 
@@ -35,32 +40,29 @@ int main(){
   server_addr.sin_addr.s_addr = INADDR_ANY ;
 
   int rv = bind(fd,(const struct sockaddr*)&server_addr,sizeof(server_addr));
+  if(rv<0){
+    perror("Error : bind()");
+    exit(1);
+  }
 
-  listen(fd,SOMAXCONN) ;
+  rv = listen(fd,SOMAXCONN) ;
+  if(rv<0){
+    perror("Error : listen()");
+    exit(1);
+  }
+
+  cout<<"Server listening on PORT : "<<PORT<<endl ;
+
+  srtruct pollfd listening_pfd = {} ;
+  listening_pfd.fd = fd ;
+  listening_pfd.events = POLLIN ;
+  listening_pfd.revents = 0 ;
+
+  pfds.pb(listening_pfd) ;
 
   while(1){
-
-    fds.clear();
-
-    struct listening_fd = {} ;
-    listening_fd.fd = fd ;
-    listening_fd.events = POLLERR | POLLIN ;
-    listening_fd.revents = POLLERR ;
-
-    fds.pb(listening_fd); // add the listening fd .
-
-    struct sockaddr_in client_addr = {} ;
-    socklen_t client_addr_len;
-
-    int client_fd = accept(fd,(struct sockaddr*)&client_addr,&client_addr_len);
-
     
-  
-    nfds_t nfds = fds.size() ;
-
-    int reqs = poll(fds.begin(),nfds,0) ; // timeout 0 : non - blocking ;
-
-  
+    int number_of_events = poll(pfds,pfds.size(),-1) ;
 
   }
 
