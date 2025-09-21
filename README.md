@@ -8,7 +8,7 @@
 - Request-Response Protocol -- ✅
 - Concurrent IO Models -- ✅
 - Event Loop (Part 1) -- ✅
-- Event Loop (Part 2)
+- Event Loop (Part 2) -- ✅
 
 * Key-Value Server
 
