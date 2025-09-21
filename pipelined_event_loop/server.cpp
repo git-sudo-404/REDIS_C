@@ -113,7 +113,11 @@ static void handle_read(int client_fd){
     return;
   }
 
-  while(try_one_read(client_fd)){}
+  while(try_one_read(client_fd)){
+    if(conn->outgoing.size()){
+      conn->want_write = true;
+    }
+  }
   
 }
 
