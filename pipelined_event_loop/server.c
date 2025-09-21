@@ -1,3 +1,12 @@
+/* Pipelining                                */
+/* client (one-by-one)   client (pipeline)   */
+/* ────────────────────────────────────────► */
+/*  ╲  ↗ ╲  ↗             ╲ ╲↗ ↗             */
+/*   ╲╱   ╲╱               ╲╱╲╱              */
+/* ────────────────────────────────────────► */
+/* server                                    */
+
+
 #include<stdio.h>
 #include<iostream>
 #include<vector>
@@ -9,7 +18,7 @@
 
 #define PORT 8080
 #define BUFFER_SIZE 4096
-
+#define max_msg_len 4096
 struct Conn{
   
   int fd;
@@ -42,10 +51,46 @@ static void handle_accept(int server_fd){
   client_conn->want_close = false;
 
   if(fd2conn.size()<=client_fd){
-    fd2conn.resize(client_fd);
+    fd2conn.resize(client_fd+1);
   }
 
   fd2conn[client_fd] = client_conn;
+
+}
+
+//NOTE: Whenever this 'try_one_request()' function is called the 'conn::incoming' buffer should have 
+// atlest one complete request. Or else don't parse anything , just return.
+// px --> prefix length, msg --> message /data .
+// conn::incoming :
+// |px|msg|px|msg|px..
+// --> I process this buffer only when it contains atleast on complete |px|msg|.
+// --> Make the return type of the 'try_one_request()' boolean , so that it returns true and 
+// keeps on executing as long as the prev req was sent. if prev req fails(not enough data in conn::incoming buffer)
+// then it doesn't call itself again.
+
+static bool try_one_request(int client_fd){   
+
+  Conn *conn = fd2conn[client_fd];
+  if(!conn)return false;
+
+  if(conn->incoming.size()<4)
+    return false;   // Needs to read again to get the prefix length.
+
+  int prefix_length;
+  memcpy(&prefix_length,conn->incoming.data(),4);
+
+  if(4+prefix_length>conn->incoming.size())
+    return false; // Needs to get the full msg.
+
+  memcpy(
+        conn->outgoing.data() + conn->outgoing.size(),
+        conn->incoming[4],
+        prefix_length
+        );
+
+  conn->incoming.erase(conn->incoming.data(),conn->incoming.data()+4+prefix_length);
+
+  return true;
 
 }
 
@@ -54,10 +99,25 @@ static void handle_read(int client_fd){
   Conn *conn = fd2conn[client_fd];
   if(!conn)
     return ;
+  
+  uint32_t bytes_read = read(
+                            conn->fd,
+                            conn->incoming.data() + conn->incoming.size(),
+                            max_msg_len
+                            );
 
+  if(bytes_read<0){
+    conn->want_close = true;
+    return;
+  }
 
-
+  while(try_one_request(client_fd)){}
+  
 }
+
+
+
+
 
 
 int main(){
@@ -90,7 +150,7 @@ int main(){
     
     pfds.push_back(server_pfd);
 
-    for(int i=3;i<=fd2conn.size();i++){
+    for(int i=3;i<fd2conn.size();i++){
       
       Conn *conn = fd2conn[i];
       
@@ -114,7 +174,7 @@ int main(){
         continue;
       }
       
-      pfds.pb(client_pfd);
+      pfds.push_back(client_pfd);
 
     }
 
@@ -135,6 +195,10 @@ int main(){
         handle_write(pfds[i].fd);
 
       if(pfds[i].revents & POLLERR){
+        Conn *conn = fd2conn[pfds[i].fd];
+        close(conn->fd);
+        pfds[i].fd = -1;
+        delete(conn);
         fd2conn[pfds[i].fd] = NULL;
         continue;
       }
