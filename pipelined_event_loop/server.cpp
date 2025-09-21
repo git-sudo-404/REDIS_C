@@ -13,8 +13,11 @@
 #include<cstdint>
 #include<sys/socket.h>
 #include<arpa/inet.h>
-#include<fcnt.h>
+#include<fcntl.h>
 #include<poll.h>
+#include<unistd.h>
+#include<string.h>
+#include<stdlib.h>
 
 #define PORT 8080
 #define BUFFER_SIZE 4096
@@ -58,17 +61,17 @@ static void handle_accept(int server_fd){
 
 }
 
-//NOTE: Whenever this 'try_one_request()' function is called the 'conn::incoming' buffer should have 
+//NOTE: Whenever this 'try_one_read()' function is called the 'conn::incoming' buffer should have 
 // atlest one complete request. Or else don't parse anything , just return.
 // px --> prefix length, msg --> message /data .
 // conn::incoming :
 // |px|msg|px|msg|px..
 // --> I process this buffer only when it contains atleast on complete |px|msg|.
-// --> Make the return type of the 'try_one_request()' boolean , so that it returns true and 
+// --> Make the return type of the 'try_one_read()' boolean , so that it returns true and 
 // keeps on executing as long as the prev req was sent. if prev req fails(not enough data in conn::incoming buffer)
 // then it doesn't call itself again.
 
-static bool try_one_request(int client_fd){   
+static bool try_one_read(int client_fd){   
 
   Conn *conn = fd2conn[client_fd];
   if(!conn)return false;
@@ -84,11 +87,11 @@ static bool try_one_request(int client_fd){
 
   memcpy(
         conn->outgoing.data() + conn->outgoing.size(),
-        conn->incoming[4],
+        conn->incoming.data()+4,
         prefix_length
         );
 
-  conn->incoming.erase(conn->incoming.data(),conn->incoming.data()+4+prefix_length);
+  conn->incoming.erase(conn->incoming.begin(),conn->incoming.begin()+4+prefix_length);
 
   return true;
 
@@ -97,8 +100,7 @@ static bool try_one_request(int client_fd){
 static void handle_read(int client_fd){
 
   Conn *conn = fd2conn[client_fd];
-  if(!conn)
-    return ;
+  if(!conn) return ;
   
   uint32_t bytes_read = read(
                             conn->fd,
@@ -111,12 +113,31 @@ static void handle_read(int client_fd){
     return;
   }
 
-  while(try_one_request(client_fd)){}
+  while(try_one_read(client_fd)){}
   
 }
 
 
+static void handle_write(int client_fd){
 
+  Conn *conn = fd2conn[client_fd];
+
+  if(!conn)return;
+
+  uint32_t bytes_written = write(
+                                conn->fd,
+                                conn->outgoing.data(),
+                                conn->outgoing.size()
+                                ); 
+
+  if(bytes_written<0){
+    conn->want_close = true;
+    return;
+  }
+
+  return;
+
+}
 
 
 
@@ -137,7 +158,7 @@ int main(){
   listen(fd,SOMAXCONN);
   // Set listening socket to non-blocking
   fcntl(fd,F_SETFL,fcntl(fd,F_GETFL,0)|O_NONBLOCK);
-  cout<<"Server listening on PORT : "<<PORT<<endl;
+  std::cout<<"Server listening on PORT : "<<PORT<<std::endl;
 
   struct pollfd server_pfd = {};
   server_pfd.fd = fd;
