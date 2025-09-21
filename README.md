@@ -1,4 +1,6 @@
 ## REDIS implementation from scratch in C/C++
+  
+<img width="3000" height="2000" alt="redis" src="https://github.com/user-attachments/assets/4465b4c7-e44a-4dc7-ab92-8fbb45471afd" />  
 
 ### Part 1. Redis from 0 to 1
 
@@ -22,3 +24,4 @@
 - Timer and Timeout
 - Cache Expiration with TTL
 - Thread Pool
+
