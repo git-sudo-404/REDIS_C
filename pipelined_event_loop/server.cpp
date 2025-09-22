@@ -123,6 +123,8 @@ static void handle_accept(int server_fd){
   int client_fd = accept(server_fd,(struct sockaddr*)&client_addr,&client_addr_len);
   // Set client socket to non-blocking
   fcntl(client_fd, F_SETFL, fcntl(client_fd, F_GETFL, 0) | O_NONBLOCK);
+
+  std::cout<<"New Client Connestion : "<<client_fd<<std::endl;
   
   Conn *client_conn = new Conn(); // Allocates on the heap.
 
@@ -166,10 +168,12 @@ static bool try_one_read(int client_fd){
     return false;   // Needs to read again to get the prefix length.
 
   size_t prefix_length = 0;
+  uint8_t pref_bytes[4];
   // memcpy(&prefix_length,conn->incoming.data(),4);
   for(int i=0;i<4;i++){
     prefix_length <<=8;     // 4 bytes of prefix_length ==> uint8_t | uint8_t | uint8_t | uint8_t.
     prefix_length |= peek_from_Queue(conn->incoming,i);
+    pref_bytes[i] = peek_from_Queue(conn->incoming,i);
   }
 
   if(4+prefix_length>conn->incoming.size)
@@ -183,6 +187,9 @@ static bool try_one_read(int client_fd){
 
   for(int i=0;i<4;i++)    // consume the 4-byte prefix length.
     get_from_Queue(conn->incoming);
+
+  for(int i=0;i<4;i++)
+    add_to_Queue(conn->outgoing,pref_bytes[i]);
 
   for(int i=0;i<prefix_length;i++){
     add_to_Queue(conn->outgoing,get_from_Queue(conn->incoming));
@@ -202,34 +209,41 @@ static bool try_one_read(int client_fd){
 
 static void handle_write(int client_fd){
 
-  Conn *conn = fd2conn[client_fd];
+  Conn *conn = fd2conn[client_fd] ;
 
-  if(!conn)return;
+  if(!conn)
+    return;
 
   uint8_t buf[BUFFER_SIZE];
+  int ind = 0;
 
-  uint32_t ind = 0;
-  while(conn->outgoing.size>0 and ind<BUFFER_SIZE){
-    buf[ind] = get_from_Queue(conn->outgoing);
+  for(int i=0;i<conn->outgoing.size;i++){
+    buf[ind] = peek_from_Queue(conn->outgoing,i);
     ind++;
   }
 
-  uint32_t bytes_written = write(conn->fd,&ind,4);
-
-   bytes_written = write(
-    conn->fd,
-    buf,
-    ind 
-  ); 
+  size_t bytes_written = write(conn->fd,buf,ind);
 
   if(bytes_written<0){
-    conn->want_close = true;
-    return;
+    if(errno == EAGAIN || errno == EWOULDBLOCK)
+      return;
+    perror("Error : handle_write()");
+    exit(1);
+  }
+
+  for(int i=0;i<bytes_written;i++)
+    get_from_Queue(conn->outgoing);
+
+  if(isEmpty(conn->outgoing)){
+    conn->want_write = false;
   }
 
   return;
 
+
 }
+
+
 
 
 
@@ -250,7 +264,7 @@ static void handle_read(int client_fd){
     BUFFER_SIZE
   );
 
-  if(bytes_read<0){
+  if(bytes_read<=0){
     conn->want_close = true;
     return;
   }
@@ -268,7 +282,7 @@ static void handle_read(int client_fd){
   while(try_one_read(client_fd)){
     if(!isEmpty(conn->outgoing)){
       conn->want_write = true;
-      handle_write(client_fd);
+      // handle_write(client_fd);
     }
   }
   
