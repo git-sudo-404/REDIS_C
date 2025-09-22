@@ -1,48 +1,60 @@
 #include <iostream>
 #include <vector>
 #include <cstdint>
-#include <unistd.h>      // For read, write, close
-#include <sys/socket.h>  // For socket functions
-#include <arpa/inet.h>   // For inet_addr
-#include <string.h>      // For memset
-#include <string>        // For std::string
+#include <unistd.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <string.h>
+#include <string>
 
-// Define a port and buffer size for clarity
 #define PORT 8080
 #define BUFFER_SIZE 4096
 
+// Helper function to read a specific number of bytes, handling partial reads
+static bool read_all(int fd, void *buf, size_t n) {
+    char *p = (char *)buf;
+    size_t bytes_to_read = n;
+    while (bytes_to_read > 0) {
+        ssize_t bytes_read = read(fd, p, bytes_to_read);
+        if (bytes_read <= 0) {
+            // Error or connection closed
+            return false;
+        }
+        p += bytes_read;
+        bytes_to_read -= bytes_read;
+    }
+    return true;
+}
+
+// Helper function to send a length-prefixed message
+static bool send_message(int fd, const std::string& msg) {
+    uint32_t len = msg.length();
+    uint32_t network_len = htonl(len);
+    if (write(fd, &network_len, 4) != 4) return false;
+    if (write(fd, msg.c_str(), len) != (ssize_t)len) return false;
+    std::cout << "Sent: " << msg << std::endl;
+    return true;
+}
+
 int main() {
-    // --- 1. Create a socket ---
-    // AF_INET: IPv4, SOCK_STREAM: TCP, 0: Default protocol
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
-        // Always check for errors after system calls
         perror("socket error");
         return 1;
     }
 
-    // --- 2. Specify server address ---
     struct sockaddr_in server_addr = {};
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(PORT); // Use htons to convert port to network byte order
-
-    // FIX: You were setting the address to the port number.
-    // Use inet_addr("127.0.0.1") for localhost (loopback).
+    server_addr.sin_port = htons(PORT);
     server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    // Alternatively, for any interface on the host: INADDR_ANY,
-    // or for loopback: INADDR_LOOPBACK. inet_addr is more explicit.
 
-    // --- 3. Connect to the server ---
-    int rv = connect(fd, (const struct sockaddr*)&server_addr, sizeof(server_addr));
-    if (rv < 0) {
+    if (connect(fd, (const struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
         perror("connect error");
-        close(fd); // Clean up the file descriptor
+        close(fd);
         return 1;
     }
-
     std::cout << "Successfully connected to server!" << std::endl;
 
-    // --- 4. Send messages to the server ---
     std::vector<std::string> msgs = {
         "Hello Server, message 1!",
         "This is message 2.",
@@ -51,47 +63,38 @@ int main() {
     };
 
     for (const auto &msg : msgs) {
-        // FIX: Use .c_str() to get the C-style string and .length() for the size.
-        // strlen() is not safe if the string contains null characters.
-        ssize_t bytes_written = write(fd, msg.c_str(), msg.length());
-        if (bytes_written < 0) {
-            perror("write error");
-            break; // Exit loop on error
+        if (!send_message(fd, msg)) {
+            break;
         }
-        std::cout << "Sent: " << msg << std::endl;
-        sleep(1); // Small delay to see messages individually on the server
     }
-
-    // --- 5. Read response from the server ---
-    char buffer[BUFFER_SIZE] = {0}; // Use a simple char array as a buffer
-    ssize_t bytes_read;
 
     std::cout << "\nWaiting for server response..." << std::endl;
 
-    // FIX: The read loop was structured incorrectly.
-    // This loop reads data until the server closes the connection (read returns 0)
-    // or an error occurs (read returns -1).
-    while ((bytes_read = read(fd, buffer, BUFFER_SIZE - 1)) > 0) {
-        // Null-terminate the received data to safely print it as a string
-        buffer[bytes_read] = '\0';
-        std::cout << "Received " << bytes_read << " bytes: " << buffer << std::endl;
+    // --- CORRECTED READ LOGIC ---
+    while (true) {
+        // 1. Read the 4-byte length prefix
+        uint32_t network_len;
+        if (!read_all(fd, &network_len, 4)) {
+            break; // Connection closed or error
+        }
+        uint32_t len = ntohl(network_len);
 
-        // Clear the buffer for the next read
-        memset(buffer, 0, BUFFER_SIZE);
+        if (len > BUFFER_SIZE - 1) {
+            std::cerr << "Error: Message too long!" << std::endl;
+            break;
+        }
+
+        // 2. Read the message payload
+        char buffer[BUFFER_SIZE];
+        if (!read_all(fd, buffer, len)) {
+            break; // Connection closed or error
+        }
+        buffer[len] = '\0'; // Null-terminate
+
+        std::cout << "Received: " << buffer << std::endl;
     }
 
-    if (bytes_read == 0) {
-        // This is the normal way to exit the loop: server closed the connection
-        std::cout << "Server closed the connection." << std::endl;
-    } else if (bytes_read < 0) {
-        // An error occurred during read
-        perror("read error");
-    }
-
-    // --- 6. Close the socket ---
     close(fd);
     std::cout << "Connection closed." << std::endl;
-
     return 0;
 }
-
