@@ -18,6 +18,7 @@
 // len  --> length of the following string.
 // str1 --> the message/data.
 //
+//  Eg : SET mykey myvalue
 //
 // RESPONSE : 
 //
@@ -49,10 +50,85 @@
 #include<unistd.h>
 #include<string.h>
 #include<stdlib.h>
+#include<memory>
 
 #define PORT 8080
 #define BUFFER_SIZE 4096
 #define max_msg_len 4096
+
+// <----------- Store ------------>
+
+std::map<std::string,std::string>store;   // rn use map, implement later.
+
+
+// <------------ Response ---------->
+
+struct Response{
+
+  uint32_t status;
+  std::vector<uint8_t> data;
+
+};
+
+
+// <------------ QUEUE ----------->
+
+struct Queue{
+
+  uint8_t buffer[BUFFER_SIZE]={};
+  size_t front = 0;   // Use size_t for sizes and indices.
+  size_t back = 0;
+  size_t size = 0;
+  
+};
+
+
+static bool add_to_Queue(Queue& q,uint8_t byte){
+  
+  if(q.size==BUFFER_SIZE)
+    return false;
+  
+  q.buffer[q.back] = byte;
+  q.back = (q.back+1)%BUFFER_SIZE;
+  q.size++;
+
+  return true;
+
+}
+
+static uint8_t get_from_Queue(Queue& q){
+
+  if(q.size==0)
+    return 0;
+
+  uint8_t rv = q.buffer[q.front];
+  q.front = (q.front+1)%BUFFER_SIZE;
+  q.size--;
+  
+  return rv;
+}
+
+static uint8_t peek_from_Queue(Queue &q,int ind){
+
+  if(q.size==0 or ind>q.size)
+    return 0;
+
+  return q.buffer[(q.front + ind)%BUFFER_SIZE];
+
+}
+
+static bool isFull(Queue &q){
+  return q.size == BUFFER_SIZE;
+}
+
+static bool isEmpty(Queue &q){
+  return q.size == 0;
+}
+
+
+//   <-------------- QUEUE ENDS ------------->
+
+
 struct Conn{
   
   int fd;
@@ -61,12 +137,30 @@ struct Conn{
   bool want_write;
   bool want_close;
 
-  std::vector<uint8_t>incoming,outgoing;
+
+  // struct Queue* incoming = new Queue();    NOTE: This way of defining is fine , but then it allocates the Queue 
+  // struct Queue* outgoing = new Queue();          in the heap. So when Conn is deleted, Queue remains. Have to 
+  //                                                manually delete them. Instead use a smart pointer from <memory>.
+
+  // std::unique_ptr<Queue> incoming = std::make_unique<Queue>();         <--   Better way.
+  // std::unique_ptr<Queue> outgoing = std::make_unique<Queue>();    
+
+  Queue incoming;           // <-- Best way (since the Queue is of fixed size.)
+  Queue outgoing;           // The 'incoming' & 'outgoing' lives as long as Conn lives.
 
 };
 
+//      <----------- Global maps for fd->conn and poll args vector ------------>
+
 std::vector<Conn*>fd2conn;
 std::vector<pollfd>pfds;
+
+//      <----------- Global maps for fd->conn and poll args vector -- ENDS  ------------>
+
+
+
+//      <------------ HANDLE Functions ----------->
+
 
 static void handle_accept(int server_fd){
 
@@ -76,6 +170,8 @@ static void handle_accept(int server_fd){
   int client_fd = accept(server_fd,(struct sockaddr*)&client_addr,&client_addr_len);
   // Set client socket to non-blocking
   fcntl(client_fd, F_SETFL, fcntl(client_fd, F_GETFL, 0) | O_NONBLOCK);
+
+  std::cout<<"New Client Connestion : "<<client_fd<<std::endl;
   
   Conn *client_conn = new Conn(); // Allocates on the heap.
 
@@ -92,6 +188,13 @@ static void handle_accept(int server_fd){
 
 }
 
+
+
+
+
+
+
+
 //NOTE: Whenever this 'try_one_read()' function is called the 'conn::incoming' buffer should have 
 // atlest one complete request. Or else don't parse anything , just return.
 // px --> prefix length, msg --> message /data .
@@ -102,77 +205,237 @@ static void handle_accept(int server_fd){
 // keeps on executing as long as the prev req was sent. if prev req fails(not enough data in conn::incoming buffer)
 // then it doesn't call itself again.
 
+
 static bool try_one_read(int client_fd){   
 
   Conn *conn = fd2conn[client_fd];
   if(!conn)return false;
 
-  if(conn->incoming.size()<4)
+  if(conn->incoming.size<4)
     return false;   // Needs to read again to get the prefix length.
 
-  int prefix_length;
-  memcpy(&prefix_length,conn->incoming.data(),4);
+  size_t prefix_length = 0;
+  uint8_t pref_bytes[4];
+  // memcpy(&prefix_length,conn->incoming.data(),4);
+  for(int i=0;i<4;i++){
+    prefix_length <<=8;     // 4 bytes of prefix_length ==> uint8_t | uint8_t | uint8_t | uint8_t.
+    prefix_length |= peek_from_Queue(conn->incoming,i);
+    pref_bytes[i] = peek_from_Queue(conn->incoming,i);
+  }
 
-  if(4+prefix_length>conn->incoming.size())
+  if(4+prefix_length>conn->incoming.size)
     return false; // Needs to get the full msg.
 
-  memcpy(
-        conn->outgoing.data() + conn->outgoing.size(),
-        conn->incoming.data()+4,
-        prefix_length
-        );
+  // memcpy(
+  //       conn->outgoing.data() + conn->outgoing.size(),
+  //       conn->incoming.data()+4,
+  //       prefix_length
+  //       );
 
-  conn->incoming.erase(conn->incoming.begin(),conn->incoming.begin()+4+prefix_length);
+  for(int i=0;i<4;i++)    // consume the 4-byte prefix length.
+    get_from_Queue(conn->incoming);
+
+  for(int i=0;i<4;i++)
+    add_to_Queue(conn->outgoing,pref_bytes[i]);
+
+  for(int i=0;i<prefix_length;i++){
+    add_to_Queue(conn->outgoing,get_from_Queue(conn->incoming));
+  } 
+
+  // conn->incoming.erase(conn->incoming.begin(),conn->incoming.begin()+4+prefix_length);
 
   return true;
 
 }
 
-static void handle_read(int client_fd){
 
-  Conn *conn = fd2conn[client_fd];
-  if(!conn) return ;
-  
-  uint32_t bytes_read = read(
-                            conn->fd,
-                            conn->incoming.data() + conn->incoming.size(),
-                            max_msg_len
-                            );
 
-  if(bytes_read<0){
-    conn->want_close = true;
-    return;
-  }
 
-  while(try_one_read(client_fd)){
-    if(conn->outgoing.size()){
-      conn->want_write = true;
-    }
-  }
-  
-}
+
 
 
 static void handle_write(int client_fd){
 
-  Conn *conn = fd2conn[client_fd];
+  Conn *conn = fd2conn[client_fd] ;
 
-  if(!conn)return;
+  if(!conn)
+    return;
 
-  uint32_t bytes_written = write(
-                                conn->fd,
-                                conn->outgoing.data(),
-                                conn->outgoing.size()
-                                ); 
+  uint8_t buf[BUFFER_SIZE];
+  int ind = 0;
+
+  for(int i=0;i<conn->outgoing.size;i++){
+    buf[ind] = peek_from_Queue(conn->outgoing,i);
+    ind++;
+  }
+
+  size_t bytes_written = write(conn->fd,buf,ind);
 
   if(bytes_written<0){
-    conn->want_close = true;
-    return;
+    if(errno == EAGAIN || errno == EWOULDBLOCK)
+      return;
+    perror("Error : handle_write()");
+    exit(1);
+  }
+
+  for(int i=0;i<bytes_written;i++)
+    get_from_Queue(conn->outgoing);
+
+  if(isEmpty(conn->outgoing)){
+    conn->want_write = false;
   }
 
   return;
 
+
 }
+
+
+static uint32_t parse_set(Conn *conn,size_t &keyword_len){
+
+  if(conn->incoming.size < 4+4+keyword_len+4)
+    return -1; // needs read.
+
+  size_t key_len;
+  for(int i=0;i<4;i++){
+    key_len<<=8;
+    key_len|=peek_from_Queue(conn->incoming,4+4+keyword_len+i);
+  }
+
+  if(conn->incoming.size< 4 + 4 + keyword_len + 4 + key_len)
+    return -1; // needs read.
+
+  std::string key(key_len);
+  for(int i=0;i<key_len;i++){
+    key[i] = peek_from_Queue(conn->incoming,4+4+keyword_len+4+i);
+  }
+
+  if(conn->incoming.size < 4 + 4 + keyword_len + 4 + key_len + 4)
+    return -1; // needs read.
+
+  size_t value_len;
+  for(int i=0;i<4;i++){
+    value_len<<=8;
+    value_len|=peek_from_Queue(conn->incoming,4 + 4 + keyword_len + 4 + key_len + i);
+  }
+
+  if(conn->incoming < 4 + 4 + keyword_len + 4 + key_len + 4 + value_len)
+    return -1; // needs read.
+
+  std::string value(value_len);
+  for(int i=0;i<value_len;i++){
+    value[i] = peek_from_Queue(conn->incoming,4+4+keyword_len+4+key_len+4+i);
+  }
+
+  store[key] = value;
+
+  uint32_t buf_consume = 4 + 4 + keyword_len + 4 + key_len + 4 + value_len ;
+
+  return buf_consume ;
+
+}
+
+
+static uint32_t parse_get(Conn *conn,size_t &keyword_len){
+
+  if(conn->incoming.size<4+4+keyword_len+4)
+    return -1 ; // needs read.
+
+  size_t key_len;
+  for(int i=0;i<4;i++){
+    key_len<<=8;
+    key_len|=peek_from_Queue(conn->incoming,4+4+keyword_len+i);
+  }
+
+  if(conn->incoming.size<4+4+keyword_len+4+key_len)
+    return -1;  // needs read.
+
+  std::string key(key_len);
+  for(int i=0;i<key_len;i++){
+    key[i] = peek_from_Queue(conn->incoming,4+4+keyword_len+4+i);
+  }
+
+  // send respine logic.
+
+}
+
+
+static uint32_t parse_req(Conn *conn){
+  
+  size_t nstr;
+  for(int i=0;i<4;i++){
+    nstr<<=8;
+    nstr|=peek_from_Queue(conn->incoming,i);
+  }
+
+
+  if(conn->incoming.size<4+4)
+    return -1; // needs read.
+
+  size_t keyword_len;
+  for(int i=4;i<8;i++){
+    keyword_len<<=8;
+    keyword_len|=peek_from_Queue(conn->incoming,i);
+  }
+
+  if(conn->incoming.size<4+4+keyword_len)
+    return -1; // needs read. 
+
+     std::string keyword(keyword_len); // GET/SET/DEL.
+  for(int i=0;i<keyword_len;i++){
+    keyword[i] = peek_from_Queue(conn->incoming,4+4+i);
+  }
+
+  if(keyword=="SET"){
+    return parse_set(conn,keyword_len);
+  } else if(keyword=="GET"){
+    return parse_get(conn,keyword_len);
+  } else if(keyword=="DEL"){
+    return parse_del(conn,keyword_len);
+  } else {
+    return parse_invalid_req(conn,keyword_len);
+  }
+
+  return -1;
+
+}
+
+
+static void handle_read(int client_fd){
+ 
+  
+  Conn *conn = fd2conn[client_fd];
+  if(!conn or conn->incoming.size<4)
+    return; // read again.
+ 
+  char buffer[BUFFER_SIZE];
+
+  size_t bytes_read = read(conn->fd,buf,BUFFER_SIZE) ;
+
+  if(bytes_read<=0){
+    conn->want_close = true;
+    return;
+  }
+
+  for(int i=0;i<bytes_read;i++)
+    add_to_Queue(conn->incoming,buf[i]);
+
+  uint32_t rv = parse_req(conn);
+
+  if(rv<0){
+    return; //needs read.
+  } else {
+    for(int i=0;i<rv;i++)
+      get_from_Queue(conn->incoming);
+  }
+
+}
+
+
+
+
+//      <------------ HANDLE Functions -- ENDS  ----------->
+
 
 
 
