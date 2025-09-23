@@ -299,7 +299,7 @@ static void handle_write(int client_fd){
 static void send_response(Conn *conn,struct Response &resp){
 
   uint8_t buf[BUFFER_SIZE];
-  int ind = 0;
+  size_t ind = 0;
 
   if(resp.data.size()>0){   // GET 
 
@@ -323,7 +323,9 @@ static void send_response(Conn *conn,struct Response &resp){
     }
 
   } else {  // SET, DEl 
-    
+   
+    // std::cout<<"Inside Send Response : SET/DEL"<<std::endl;
+
     uint32_t nstr = 1;
     memcpy(buf,&nstr,4);
 
@@ -338,7 +340,9 @@ static void send_response(Conn *conn,struct Response &resp){
   }
   
   for(int i=0;i<ind;i++)
-    add_to_Queue(conn->outgoing,buf[ind]);
+    add_to_Queue(conn->outgoing,buf[i]);
+
+  // std::cout<<"Sent Response to Client"<<std::endl;
 
   return;
 
@@ -346,14 +350,21 @@ static void send_response(Conn *conn,struct Response &resp){
 
 static uint32_t parse_set(Conn *conn,size_t &keyword_len){
 
+  // std::cout<<"Inside Parse Set"<<std::endl;
+
   if(conn->incoming.size < 4+4+keyword_len+4)
     return -1; // needs read.
 
   size_t key_len;
+  uint8_t temp_buf[4];
   for(int i=0;i<4;i++){
-    key_len<<=8;
-    key_len|=peek_from_Queue(conn->incoming,4+4+keyword_len+i);
+    // key_len<<=8;
+    temp_buf[i] = peek_from_Queue(conn->incoming,4+4+keyword_len+i);
   }
+
+  memcpy(&key_len,temp_buf,4);
+
+  // std::cout<<"key_len : "<<key_len<<std::endl;
 
   if(conn->incoming.size< 4 + 4 + keyword_len + 4 + key_len)
     return -1; // needs read.
@@ -363,14 +374,20 @@ static uint32_t parse_set(Conn *conn,size_t &keyword_len){
     key[i] = peek_from_Queue(conn->incoming,4+4+keyword_len+4+i);
   }
 
+  // std::cout<<"key : "<<key<<std::endl;
+
   if(conn->incoming.size < 4 + 4 + keyword_len + 4 + key_len + 4)
     return -1; // needs read.
 
-  size_t value_len;
+  uint32_t value_len;
   for(int i=0;i<4;i++){
-    value_len<<=8;
-    value_len|=peek_from_Queue(conn->incoming,4 + 4 + keyword_len + 4 + key_len + i);
+    // value_len<<=8;
+    temp_buf[i] = peek_from_Queue(conn->incoming,4 + 4 + keyword_len + 4 + key_len + i);
   }
+
+  memcpy(&value_len,temp_buf,4);
+
+  // std::cout<<"value_len : "<<value_len<<std::endl;
 
   if(conn->incoming.size < 4 + 4 + keyword_len + 4 + key_len + 4 + value_len)
     return -1; // needs read.
@@ -389,6 +406,8 @@ static uint32_t parse_set(Conn *conn,size_t &keyword_len){
 
   send_response(conn,response_set);
 
+  // std::cout<<"SET KEY : "<<key<<" VAL : "<<store[key]<<std::endl;
+
   return buf_consume ;
 
 }
@@ -399,11 +418,14 @@ static uint32_t parse_get(Conn *conn,size_t &keyword_len){
   if(conn->incoming.size<4+4+keyword_len+4)
     return -1 ; // needs read.
 
-  size_t key_len;
+  uint32_t key_len;
+  uint8_t temp_buf[4];
   for(int i=0;i<4;i++){
-    key_len<<=8;
-    key_len|=peek_from_Queue(conn->incoming,4+4+keyword_len+i);
+    // key_len<<=8;
+    temp_buf[i]=peek_from_Queue(conn->incoming,4+4+keyword_len+i);
   }
+
+  memcpy(&key_len,temp_buf,4);
 
   if(conn->incoming.size<4+4+keyword_len+4+key_len)
     return -1;  // needs read.
@@ -417,7 +439,23 @@ static uint32_t parse_get(Conn *conn,size_t &keyword_len){
 
   struct Response response_get = {};
   response_get.status = 200;
-  
+ 
+  if(store.find(key)==store.end()){
+    
+    response_get.status = 404;
+
+    std::string data = "Key Not Found!";
+
+    size_t len = data.size();
+
+    for(int i=0;i<len;i++)
+      response_get.data.push_back(data[i]);
+
+    send_response(conn,response_get);
+
+    return buf_consume;
+  }
+
   std::string value = store[key] ;
 
   for(int i=0;i<value.size();i++)
@@ -434,11 +472,14 @@ static uint32_t parse_del(Conn *conn,size_t &keyword_len){
   if(conn->incoming.size<4+4+keyword_len+4)
     return -1; // needs read 
 
-  size_t key_len;
+  uint32_t key_len;
+  uint8_t temp_buf[4];
   for(int i=0;i<4;i++){
-    key_len<<=8;
-    key_len|=peek_from_Queue(conn->incoming,4+4+keyword_len+i);
+    // key_len<<=8;
+    temp_buf[i] = peek_from_Queue(conn->incoming,4+4+keyword_len+i);
   }
+
+  memcpy(&key_len,temp_buf,4);
 
   if(conn->incoming.size < 4 + 4 + keyword_len + 4 + key_len)
     return -1;  // needs read.
@@ -464,22 +505,35 @@ static uint32_t parse_del(Conn *conn,size_t &keyword_len){
 
 
 static uint32_t parse_req(Conn *conn){
-  
-  size_t nstr;
+
+  // std::cout<<"Inside Parse Req"<<std::endl;
+
+  if(conn->incoming.size<4)
+    return -1;
+
+  uint32_t nstr = 0;
+  uint8_t temp_buf[4];
   for(int i=0;i<4;i++){
-    nstr<<=8;
-    nstr|=peek_from_Queue(conn->incoming,i);
+    
+    temp_buf[i] = peek_from_Queue(conn->incoming,i);
+
   }
+
+  memcpy(&nstr,temp_buf,4);
+
+  // std::cout<<"nstr : "<<nstr<<std::endl;
 
 
   if(conn->incoming.size<4+4)
     return -1; // needs read.
 
-  size_t keyword_len;
+  size_t keyword_len = 0;
   for(int i=4;i<8;i++){
-    keyword_len<<=8;
-    keyword_len|=peek_from_Queue(conn->incoming,i);
+    // keyword_len<<=8;
+    temp_buf[i-4]=peek_from_Queue(conn->incoming,i);
   }
+
+  memcpy(&keyword_len,temp_buf,4);
 
   if(conn->incoming.size<4+4+keyword_len)
     return -1; // needs read. 
@@ -503,10 +557,11 @@ static uint32_t parse_req(Conn *conn){
 
 
 static void handle_read(int client_fd){
- 
+
+  // std::cout<<"Inside handle_read()"<<std::endl;
   
   Conn *conn = fd2conn[client_fd];
-  if(!conn or conn->incoming.size<4)
+  if(!conn )
     return; // read again.
  
   uint8_t buf[BUFFER_SIZE];
@@ -529,6 +584,9 @@ static void handle_read(int client_fd){
     for(int i=0;i<rv;i++)
       pop_from_Queue(conn->incoming);
   }
+
+  if(conn->outgoing.size)
+    conn->want_write = true;
 
 }
 
