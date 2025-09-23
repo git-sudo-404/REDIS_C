@@ -12,7 +12,7 @@
 - Event Loop (Part 1) -- ✅
 - Event Loop (Part 2) -- ✅
 
-* Key-Value Server
+* Key-Value Server -- ✅
 
 ### Part 2. Advanced Topics
 
