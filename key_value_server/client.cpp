@@ -11,6 +11,8 @@
 
 static void parse_response(int &client_fd){
 
+  // std::cout<<"Inside parse_response()"<<std::endl;
+
   uint8_t buf[BUFFER_SIZE];
   int ind = 0;
 
@@ -21,13 +23,14 @@ static void parse_response(int &client_fd){
     ind += bytes_read;
   }
 
-  size_t nstr = 0;
+  uint32_t nstr = 0;
   memcpy(&nstr,buf,4);
+
+  // std::cout<<"nstr : "<<nstr<<std::endl;
+
   nstr--; // status code.
  
-  std::cout<<"nstr : "<<nstr<<std::endl;
-
-  size_t status_len = 0;
+  uint32_t status_len = 0;
   ind = 0;
   bytes_read = 0;
 
@@ -91,13 +94,17 @@ static void send_set_req(int &client_fd,std::string &key,std::string &value){
   uint8_t buf[BUFFER_SIZE];
   int ind = 0;
   
-  size_t nstr = 3;
+  uint32_t nstr = 3;
   memcpy(buf+ind,&nstr,4);
   ind+=4;
 
-  size_t keyword_len = 3;
+  // std::cout<<"nstr : "<<nstr<<std::endl;
+
+  uint32_t keyword_len = 3;
   memcpy(buf+ind,&keyword_len,4);
   ind+=4;
+
+  // std::cout<<"keyword_len : "<<keyword_len<<std::endl;
 
   std::string keyword = "SET";
   for(int i=0;i<3;i++){
@@ -105,23 +112,33 @@ static void send_set_req(int &client_fd,std::string &key,std::string &value){
     ind++;
   }
 
-  size_t key_len = key.size();
+  // std::cout<<"keyword : "<<keyword<<std::endl;
+
+  uint32_t key_len = key.size();
   memcpy(buf+ind,&key_len,4);
   ind+=4;
+
+  // std::cout<<"key_len : "<<key_len<<std::endl;
 
   for(int i=0;i<key_len;i++){
     buf[ind] = key[i];
     ind++;
   }
 
-  size_t value_len = value.size();
+  // std::cout<<"key : "<<key<<std::endl;
+
+  uint32_t value_len = value.size();
   memcpy(buf+ind,&value_len,4);
   ind+=4;
+
+  // std::cout<<"value_len : "<<value_len<<std::endl;
 
   for(int i=0;i<value_len;i++){
     buf[ind] = value[i];
     ind++;
   }
+
+  // std::cout<<"value : "<<value<<std::endl;
 
   size_t bytes_writen = 0;
   size_t total_length = ind;
@@ -134,9 +151,13 @@ static void send_set_req(int &client_fd,std::string &key,std::string &value){
     total_length -= bytes_writen;
     ind += bytes_writen;
 
+    // std::cout<<"ind : "<<ind<<" ";
+
   }
 
-  std::cout<<"SET REQUEST SENT SUCCESSFULLY!"<<std::endl;
+  std::cout<<std::endl;
+
+  // std::cout<<"SET REQUEST SENT SUCCESSFULLY!"<<std::endl;
   
   parse_response(client_fd);
 
@@ -149,11 +170,11 @@ static void send_get_req(int &client_fd,std::string &key){
   int ind = 0;
   size_t bytes_writen = 0;
 
-  size_t nstr = 2;
+  uint32_t nstr = 2;
   memcpy(buf+ind,&nstr,4);
   ind += 4;
 
-  size_t keyword_len = 3;
+  uint32_t keyword_len = 3;
   memcpy(buf+ind,&keyword_len,4);
   ind+=4;
 
@@ -163,7 +184,7 @@ static void send_get_req(int &client_fd,std::string &key){
     ind++;
   }
 
-  size_t key_len = key.size();
+  uint32_t key_len = key.size();
   memcpy(buf+ind,&key_len,4);
   ind+=4;
 
@@ -172,7 +193,7 @@ static void send_get_req(int &client_fd,std::string &key){
     ind++;
   }
 
-  size_t total_length = ind;
+  uint32_t total_length = ind;
   ind = 0;
 
   while(total_length){
@@ -189,13 +210,13 @@ static void send_del_req(int &client_fd,std::string &key){
 
   uint8_t buf[BUFFER_SIZE];
   int ind = 0;
-  size_t bytes_writen = 0;
+  uint32_t bytes_writen = 0;
 
-  size_t nstr = 2;
+  uint32_t nstr = 2;
   memcpy(buf+ind,&nstr,4);
   ind+=4;
 
-  size_t keyword_len = 3;
+  uint32_t keyword_len = 3;
   memcpy(buf+ind,&keyword_len,4);
   ind+=4;
 
@@ -205,7 +226,7 @@ static void send_del_req(int &client_fd,std::string &key){
     ind++;
   }
 
-  size_t key_len = key.size();
+  uint32_t key_len = key.size();
   memcpy(buf+ind,&key_len,4);
   ind+=4;
 
@@ -214,7 +235,7 @@ static void send_del_req(int &client_fd,std::string &key){
     ind++;
   }
 
-  size_t total_length = ind;
+  uint32_t total_length = ind;
   ind = 0;
 
   while(total_length){
