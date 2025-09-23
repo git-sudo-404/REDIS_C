@@ -338,7 +338,9 @@ static void send_response(Conn *conn,struct Response &resp){
   }
   
   for(int i=0;i<ind;i++)
-    add_to_Queue(conn->outgoing,buf[ind]);
+    add_to_Queue(conn->outgoing,buf[i]);
+
+  std::cout<<"Sent Response to Client"<std::endl;
 
   return;
 
@@ -465,7 +467,7 @@ static uint32_t parse_del(Conn *conn,size_t &keyword_len){
 
 static uint32_t parse_req(Conn *conn){
   
-  size_t nstr;
+  size_t nstr = 0;
   for(int i=0;i<4;i++){
     nstr<<=8;
     nstr|=peek_from_Queue(conn->incoming,i);
