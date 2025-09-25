@@ -1,9 +1,7 @@
-#include<vector>
+#include "hashtable.h"
+#include<iostream>
 
-
-class KV_Store{
-
-public : 
-  static void KV_Store()
-
-};
+KV_Store::KV_Store(size_t size){
+  size__ = size ;
+  table__.resize(size__);
+}

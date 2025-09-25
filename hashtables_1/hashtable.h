@@ -1,25 +1,29 @@
-#include<vector>
+#pragme once
 
+
+#include<vector>
+#include<string>
+#include<utility>
 
 class KV_Store{
 
 private :
 
-  std::vector<std::vector<std::string>>mp;
+  std::vector<std::vector<std::pair<std::string,std::string>>>table__;
 
-  int size;
+  size_t size__;
   
-  static int hash(std::string){}
+  size_t hash__(std::string& key)const{}
 
 public : 
   
-  static void KV_Store(int size){}
+  excplicit KV_Store(int size = 64){}  // Constructor must not be static and must not return any type not even void.
 
-  static void add(std::string key,std::string value){}
+  void add(std::string key,std::string value){}
 
-  static std::string get(std::string key){}
+  std::string get(std::string key){}
 
-  static void delete(std::string key){}
+  void remove(std::string key){}
 
 
 };
