@@ -6,10 +6,10 @@
 - cmake ..
 - camke --build
 
-_Terminal - 1_
+###### _Terminal - 1_
 
 - ./server
 
-_Terminal - 2_
+###### _Terminal - 2_
 
 - ./client
