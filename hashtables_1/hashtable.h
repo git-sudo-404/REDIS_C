@@ -1,4 +1,4 @@
-#pragme once
+#pragma once
 
 
 #include<vector>
@@ -13,17 +13,17 @@ private :
 
   size_t size__;
   
-  size_t hash__(std::string& key)const{}
+  size_t hash__(std::string &key)const;
 
 public : 
   
-  excplicit KV_Store(int size = 64){}  // Constructor must not be static and must not return any type not even void.
+  explicit KV_Store(size_t size = 1024);  // Constructor must not be static and must not return any type not even void.
 
-  void add(std::string key,std::string value){}
+  void add(std::string &key,std::string &value);
 
-  std::string get(std::string key){}
+  std::string get(std::string &key);
 
-  void remove(std::string key){}
+  void remove(std::string &key);
 
 
 };

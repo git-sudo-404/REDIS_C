@@ -1,15 +1,17 @@
-# Specify the minimum version of CMake required.
 cmake_minimum_required(VERSION 3.10)
-
-# Define the project name and specify the language (CXX for C++).
 project(hashtables_1 CXX)
 
-# --- Server Executable ---
-# Creates an executable named "ht_1_server".
-# It's built from server.cpp AND hashtable.cpp.
-add_executable(server server.cpp hashtable.cpp)
+# Tell CMake we want to use the C++17 standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# --- Client Executable ---
-# Creates a separate executable named "ht_1_client".
-# It's built from client.cpp and probably needs the hashtable code too.
-add_executable(client client.cpp hashtable.cpp)
+# Create a library from your hashtable source files
+add_library(kv_store hashtable.cpp)
+
+# Create the server and link it against the library
+add_executable(server server.cpp)
+target_link_libraries(server PRIVATE kv_store)
+
+# Create the client and link it against the library
+add_executable(client client.cpp)
+target_link_libraries(client PRIVATE kv_store)
