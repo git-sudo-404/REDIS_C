@@ -52,14 +52,17 @@
 #include<stdlib.h>
 #include<memory>
 #include<map>
+#include "hashtable.h"
 
 #define PORT 8080
 #define BUFFER_SIZE 4096
 #define max_msg_len 4096
 
-// <----------- Store ------------>
+// <----------- kv_store ------------>
 
-std::map<std::string,std::string>store;   // rn use map, implement later.
+// std::map<std::string,std::string>kv_store;   // rn use map, implement later.
+
+KV_Store kv_store = new KV_Store();
 
 
 // <------------ Response ---------->
@@ -397,7 +400,7 @@ static uint32_t parse_set(Conn *conn,size_t &keyword_len){
     value[i] = peek_from_Queue(conn->incoming,4+4+keyword_len+4+key_len+4+i);
   }
 
-  store[key] = value;
+  kv_store[key] = value;
 
   uint32_t buf_consume = 4 + 4 + keyword_len + 4 + key_len + 4 + value_len ;
 
@@ -406,7 +409,7 @@ static uint32_t parse_set(Conn *conn,size_t &keyword_len){
 
   send_response(conn,response_set);
 
-  // std::cout<<"SET KEY : "<<key<<" VAL : "<<store[key]<<std::endl;
+  // std::cout<<"SET KEY : "<<key<<" VAL : "<<kv_store[key]<<std::endl;
 
   return buf_consume ;
 
@@ -440,7 +443,7 @@ static uint32_t parse_get(Conn *conn,size_t &keyword_len){
   struct Response response_get = {};
   response_get.status = 200;
  
-  if(store.find(key)==store.end()){
+  if(kv_store.find(key)==store.end()){
     
     response_get.status = 404;
 
@@ -456,7 +459,7 @@ static uint32_t parse_get(Conn *conn,size_t &keyword_len){
     return buf_consume;
   }
 
-  std::string value = store[key] ;
+  std::string value = kv_store[key] ;
 
   for(int i=0;i<value.size();i++)
     response_get.data.push_back(value[i]);
@@ -490,7 +493,7 @@ static uint32_t parse_del(Conn *conn,size_t &keyword_len){
     key[i] = peek_from_Queue(conn->incoming,4+4+keyword_len+4+i);
   }
 
-  store.erase(key);
+  kv_store.erase(key);
 
   uint32_t buf_consume = 4 + 4 + keyword_len + 4 + key_len ;
 
